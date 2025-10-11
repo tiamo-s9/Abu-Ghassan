@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة تحكم طلبات المكتبة</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* تعريف الألوان المخصصة للحالات */
+        .status-new { background-color: #ffc107 !important; color: #343a40 !important; } /* أصفر */
+        .status-progress { background-color: #0dcaf0 !important; color: #343a40 !important; } /* أزرق فاتح */
+        .status-ready { background-color: #198754 !important; color: white !important; } /* أخضر */
+    </style>
+</head>
+<body class="p-4">
+    <div class="container-fluid">
+        <h1 class="mb-4 text-primary">لوحة تحكم الطلبات (المكتبة)</h1>
+        <p class="lead">قائمة الطلبات. لتحميل الملف، انقر بزر الماوس الأيمن على اسم الملف واختر "حفظ الرابط باسم...".</p>
+        
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        <th>#</th>
+                        <th>العميل</th>
+                        <th>هاتف</th>
+                        <th>الملف</th>
+                        <th>الخدمة</th>
+                        <th>وقت الطلب</th>
+                        <th>الحالة</th>
+                        <th>الإجراء</th> 
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders %}
+                    <tr>
+                        <td class="fw-bold">#{{ order.order_id }}</td>
+                        <td>{{ order.client_name }}</td>
+                        <td>{{ order.client_phone }}</td>
+                        <td><a href="{{ url_for('uploaded_file', filename=order.file_name) }}" target="_blank" class="text-decoration-none">{{ order.file_name }}</a></td>
+                        <td>{{ order.service_type }}</td>
+                        <td>{{ order.created_at }}</td>
+                        <td>
+                            <span class="badge rounded-pill
+                                {% if order.order_status == 'New' %}bg-warning status-new
+                                {% elif order.order_status == 'In Progress' %}bg-info status-progress
+                                {% elif order.order_status == 'Ready' %}bg-success status-ready
+                                {% else %}bg-secondary
+                                {% endif %}">
+                                {{ order.order_status }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if order.order_status != 'Ready' %}
+                                <form method="POST" action="{{ url_for('change_status', order_id=order.order_id) }}" style="display:inline;">
+                                    <select name="new_status" class="form-select form-select-sm" onchange="this.form.submit()">
+                                        <option value="" disabled selected>تغيير الحالة...</option>
+                                        <option value="In Progress">قيد التنفيذ</option>
+                                        <option value="Ready">جاهز للاستلام</option>
+                                    </select>
+                                </form>
+                            {% else %}
+                                <span class="text-success fw-bold">مكتمل</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not orders %}
+                    <tr><td colspan="8" class="text-center text-muted py-3">لا توجد طلبات حالياً في قائمة الانتظار.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

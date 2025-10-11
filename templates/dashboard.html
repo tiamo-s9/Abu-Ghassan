@@ -3,75 +3,85 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>لوحة تحكم طلبات المكتبة</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>لوحة تحكم الموظفين</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.rtl.min.css">
     <style>
-        /* تعريف الألوان المخصصة للحالات */
-        .status-new { background-color: #ffc107 !important; color: #343a40 !important; } /* أصفر */
-        .status-progress { background-color: #0dcaf0 !important; color: #343a40 !important; } /* أزرق فاتح */
-        .status-ready { background-color: #198754 !important; color: white !important; } /* أخضر */
+        body { padding-top: 20px; background-color: #f8f9fa; }
+        .order-card { margin-bottom: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        .status-badge { font-size: 0.9em; padding: 0.4em 0.8em; }
+        .status-Pending { background-color: #ffc107; color: #343a40; } /* أصفر */
+        .status-Processing { background-color: #0d6efd; color: white; } /* أزرق */
+        .status-Completed { background-color: #28a745; color: white; } /* أخضر */
+        .status-Cancelled { background-color: #dc3545; color: white; } /* أحمر */
     </style>
 </head>
-<body class="p-4">
-    <div class="container-fluid">
-        <h1 class="mb-4 text-primary">لوحة تحكم الطلبات (المكتبة)</h1>
-        <p class="lead">قائمة الطلبات. لتحميل الملف، انقر بزر الماوس الأيمن على اسم الملف واختر "حفظ الرابط باسم...".</p>
-        
-        <div class="table-responsive">
-            <table class="table table-striped table-hover table-bordered">
-                <thead class="table-dark">
-                    <tr>
-                        <th>#</th>
-                        <th>العميل</th>
-                        <th>هاتف</th>
-                        <th>الملف</th>
-                        <th>الخدمة</th>
-                        <th>وقت الطلب</th>
-                        <th>الحالة</th>
-                        <th>الإجراء</th> 
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for order in orders %}
-                    <tr>
-                        <td class="fw-bold">#{{ order.order_id }}</td>
-                        <td>{{ order.client_name }}</td>
-                        <td>{{ order.client_phone }}</td>
-                        <td><a href="{{ url_for('uploaded_file', filename=order.file_name) }}" target="_blank" class="text-decoration-none">{{ order.file_name }}</a></td>
-                        <td>{{ order.service_type }}</td>
-                        <td>{{ order.created_at }}</td>
-                        <td>
-                            <span class="badge rounded-pill
-                                {% if order.order_status == 'New' %}bg-warning status-new
-                                {% elif order.order_status == 'In Progress' %}bg-info status-progress
-                                {% elif order.order_status == 'Ready' %}bg-success status-ready
-                                {% else %}bg-secondary
-                                {% endif %}">
-                                {{ order.order_status }}
-                            </span>
-                        </td>
-                        <td>
-                            {% if order.order_status != 'Ready' %}
-                                <form method="POST" action="{{ url_for('change_status', order_id=order.order_id) }}" style="display:inline;">
-                                    <select name="new_status" class="form-select form-select-sm" onchange="this.form.submit()">
-                                        <option value="" disabled selected>تغيير الحالة...</option>
-                                        <option value="In Progress">قيد التنفيذ</option>
-                                        <option value="Ready">جاهز للاستلام</option>
-                                    </select>
-                                </form>
-                            {% else %}
-                                <span class="text-success fw-bold">مكتمل</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    {% if not orders %}
-                    <tr><td colspan="8" class="text-center text-muted py-3">لا توجد طلبات حالياً في قائمة الانتظار.</td></tr>
-                    {% endif %}
-                </tbody>
-            </table>
+<body>
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3">مرحباً، {{ current_user.username }} 👋</h1>
+        <div class="actions">
+            {% if current_user.is_authenticated %}
+                {% if current_user.role == 'admin' %}
+                    <a href="{{ url_for('admin_users') }}" class="btn btn-warning ms-2">إدارة المستخدمين</a>
+                {% endif %}
+                <a href="{{ url_for('logout') }}" class="btn btn-danger">تسجيل الخروج</a>
+            {% endif %}
         </div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <h2 class="mb-4">قائمة طلبات العملاء الجديدة</h2>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'success' if category == 'success' or category == 'info' else 'danger' }} flash">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    {% if not orders %}
+        <div class="alert alert-info text-center" role="alert">
+            لا توجد طلبات جديدة حاليًا في النظام.
+        </div>
+    {% else %}
+        <div class="row">
+            {% for order in orders %}
+            <div class="col-md-6 col-lg-4">
+                <div class="card order-card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">طلب رقم: #{{ order['id'] }}</h5>
+                        <span class="badge status-badge status-{{ order['order_status'] }}">{{ order['order_status'] }}</span>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>نوع المنتج:</strong> {{ order['product_type'] }}</p>
+                        <p><strong>اسم العميل:</strong> {{ order['customer_name'] }}</p>
+                        <p><strong>رقم الهاتف:</strong> {{ order['phone_number'] }}</p>
+                        <p><strong>الموقع:</strong> {{ order['location'] }}</p>
+                        <p><strong>التفاصيل:</strong> {{ order['details'] if order['details'] else 'لا توجد تفاصيل إضافية' }}</p>
+                        <p class="text-muted small">تاريخ الإضافة: {{ order['created_at'] }}</p>
+                        
+                        <hr>
+                        
+                        <form method="POST">
+                            <input type="hidden" name="order_id" value="{{ order['id'] }}">
+                            <div class="input-group">
+                                <select class="form-select" name="new_status" required>
+                                    <option value="">تغيير الحالة إلى...</option>
+                                    <option value="Pending" {% if order['order_status'] == 'Pending' %}selected{% endif %}>معلق (Pending)</option>
+                                    <option value="Processing" {% if order['order_status'] == 'Processing' %}selected{% endif %}>قيد المعالجة (Processing)</option>
+                                    <option value="Completed" {% if order['order_status'] == 'Completed' %}selected{% endif %}>مكتمل (Completed)</option>
+                                    <option value="Cancelled" {% if order['order_status'] == 'Cancelled' %}selected{% endif %}>ملغى (Cancelled)</option>
+                                </select>
+                                <button type="submit" class="btn btn-primary">تحديث</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

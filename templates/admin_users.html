@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>لوحة تحكم المدير - إدارة المستخدمين</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.rtl.min.css">
+    <style>
+        body { padding-top: 20px; }
+        .container { max-width: 900px; }
+        .flash { margin-bottom: 20px; }
+        .table th, .table td { text-align: right; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1 class="mb-4">إدارة حسابات الموظفين والمديرين</h1>
+    <a href="{{ url_for('employee_dashboard') }}" class="btn btn-secondary mb-3">العودة إلى لوحة الطلبات</a>
+    <a href="{{ url_for('logout') }}" class="btn btn-danger mb-3 float-start">تسجيل الخروج</a>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'success' if category == 'success' or category == 'info' else 'danger' }} flash">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <h2 class="mt-5">المستخدمون الحاليون (الدور: {{ current_user.role }})</h2>
+    <table class="table table-bordered table-striped">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>اسم المستخدم</th>
+                <th>الصلاحية (Role)</th>
+                <th>الإجراء</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>{{ user['id'] }}</td>
+                <td>{{ user['username'] }}</td>
+                <td><span class="badge bg-{{ 'primary' if user['role'] == 'admin' else 'success' }}">{{ user['role'] }}</span></td>
+                <td>
+                    {% if user['id'] != current_user.id %}
+                        <form method="POST" style="display:inline;" onsubmit="return confirm('هل أنت متأكد من حذف هذا المستخدم؟');">
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="user_id" value="{{ user['id'] }}">
+                            <button type="submit" class="btn btn-sm btn-danger">حذف</button>
+                        </form>
+                    {% else %}
+                        <span class="text-muted">حسابك الحالي</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2 class="mt-5">إضافة مستخدم جديد</h2>
+    <form method="POST" class="p-3 border rounded bg-light">
+        <input type="hidden" name="action" value="add">
+        <div class="mb-3">
+            <label for="username" class="form-label">اسم المستخدم:</label>
+            <input type="text" class="form-control" id="username" name="username" required>
+        </div>
+        <div class="mb-3">
+            <label for="password" class="form-label">كلمة المرور:</label>
+            <input type="password" class="form-control" id="password" name="password" required>
+        </div>
+        <div class="mb-3">
+            <label for="role" class="form-label">الصلاحية:</label>
+            <select class="form-select" id="role" name="role">
+                <option value="employee">موظف (Employee)</option>
+                <option value="admin">مدير (Admin)</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">إضافة المستخدم</button>
+    </form>
+</div>
+</body>
+</html>

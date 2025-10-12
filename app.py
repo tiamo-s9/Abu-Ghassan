@@ -7,8 +7,10 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 # ----------------- إعداد Flask وقاعدة البيانات -----------------
 
 app = Flask(__name__)
-# مفتاح سري ضروري لجلسات Flask
+# مفتاح سري ضروري للجلسات (تم حل مشكلة RuntimeError)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_strong_secret_key_here')
+# لزيادة الحد الأقصى لحجم الطلب (حل مشكلة Bad Request)
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 ميجابايت 
 
 DATABASE_PATH = 'database.db'
 
@@ -17,10 +19,10 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+# دالة تهيئة قاعدة البيانات (تم حل مشكلة الترميز)
 def init_db():
     conn = get_db_connection()
     try:
-        # التصحيح الحاسم للترميز
         with open('schema.sql', mode='r', encoding='utf-8') as f:
             conn.executescript(f.read())
         conn.commit()
@@ -55,7 +57,7 @@ def load_user(user_id):
         return User(user_data['id'], user_data['username'], user_data['role'])
     return None
 
-# ----------------- مسارات المستخدمين (تسجيل الدخول/الخروج) -----------------
+# ----------------- مسارات المستخدمين (تسجيل الدخول/الخروج/الإدارة) -----------------
 
 @app.route('/login', methods=('GET', 'POST'))
 def login():
@@ -63,8 +65,9 @@ def login():
         return redirect(url_for('employee_dashboard'))
 
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+        username = request.form.get('username') # استخدام .get() لتجنب BadRequestKeyError
+        password = request.form.get('password')
+
         conn = get_db_connection()
         user_data = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
         conn.close()
@@ -82,26 +85,24 @@ def login():
 @app.route('/logout')
 @login_required
 def logout():
-    """مسار تسجيل الخروج: ينهي الجلسة"""
     logout_user()
     flash('تم تسجيل الخروج بنجاح.', 'info')
     return redirect(url_for('login'))
 
-# مسار التسجيل (واقعي: مخصص لإنشاء أول حساب مدير فقط)
+# مسار التسجيل الأولي (محمي: مخصص لإنشاء أول حساب مدير فقط)
 @app.route('/register', methods=('GET', 'POST'))
 def register():
     conn = get_db_connection()
     user_count = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
     conn.close()
 
-    # إذا كان هناك مستخدمون بالفعل، لا تسمح بالتسجيل العام
     if user_count > 0:
         flash('لا يمكن إنشاء حسابات جديدة إلا بواسطة المدير عبر لوحة التحكم.', 'warning')
         return redirect(url_for('login'))
 
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+        username = request.form.get('username')
+        password = request.form.get('password')
         
         if not username or not password:
             flash('يجب إدخال اسم المستخدم وكلمة المرور', 'danger')
@@ -125,7 +126,6 @@ def register():
     return render_template('register.html')
 
 # ----------------- مسار لوحة المدير لإدارة المستخدمين -----------------
-# (هذا هو المسار "الواقعي" لإنشاء الحسابات)
 
 @app.route('/admin/users', methods=('GET', 'POST'))
 @login_required
@@ -141,9 +141,9 @@ def admin_users():
         action = request.form.get('action')
         
         if action == 'add':
-            username = request.form['username']
-            password = request.form['password']
-            role = request.form['role']
+            username = request.form.get('username')
+            password = request.form.get('password')
+            role = request.form.get('role')
             if username and password:
                 password_hash = generate_password_hash(password)
                 try:
@@ -154,7 +154,7 @@ def admin_users():
                     flash('اسم المستخدم موجود بالفعل.', 'danger')
         
         elif action == 'delete':
-            user_id = request.form['user_id']
+            user_id = request.form.get('user_id')
             if str(user_id) != str(current_user.id):
                 conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
                 conn.commit()
@@ -166,35 +166,18 @@ def admin_users():
     conn.close()
     return render_template('admin_users.html', users=users)
 
-# ----------------- مسارات الطلبات (الموظفين) -----------------
-
-@app.route('/dashboard', methods=('GET', 'POST'))
-@login_required
-def employee_dashboard():
-    # حماية لوحة القيادة لضمان أن المستخدم لديه دور موظف أو مدير
-    if current_user.role not in ['admin', 'employee']:
-        flash('ليس لديك الصلاحية الكافية للوصول إلى هذه الصفحة.', 'danger')
-        return redirect(url_for('login'))
-        
-    conn = get_db_connection()
-    # ... بقية منطق عرض وتحديث الطلبات ...
-    orders = conn.execute('SELECT * FROM orders ORDER BY created_at DESC').fetchall()
-    conn.close()
-    return render_template('dashboard.html', orders=orders)
-
-
-# ----------------- مسارات العميل (الواجهة الأمامية) -----------------
+# ----------------- مسارات الطلبات (العملاء والموظفين) -----------------
 
 @app.route('/', methods=('GET', 'POST'))
 @app.route('/upload', methods=('GET', 'POST'))
 def upload_order():
-    # ... منطق رفع الطلب (لم يتغير) ...
     if request.method == 'POST':
-        product_type = request.form['product_type']
-        customer_name = request.form['customer_name']
-        phone_number = request.form['phone_number']
-        location = request.form['location']
-        details = request.form['details']
+        # استخدام .get() لتجنب BadRequestKeyError
+        product_type = request.form.get('product_type')
+        customer_name = request.form.get('customer_name')
+        phone_number = request.form.get('phone_number')
+        location = request.form.get('location')
+        details = request.form.get('details')
 
         if not all([product_type, customer_name, phone_number, location]):
             flash('الرجاء تعبئة جميع الحقول المطلوبة.', 'danger')
@@ -215,6 +198,30 @@ def upload_order():
 @app.route('/success')
 def success():
     return render_template('success.html')
+
+@app.route('/dashboard', methods=('GET', 'POST'))
+@login_required
+def employee_dashboard():
+    # حماية لوحة القيادة بنظام الأدوار
+    if current_user.role not in ['admin', 'employee']:
+        flash('ليس لديك الصلاحية الكافية للوصول إلى هذه الصفحة.', 'danger')
+        return redirect(url_for('login'))
+        
+    conn = get_db_connection()
+
+    if request.method == 'POST':
+        order_id = request.form.get('order_id')
+        new_status = request.form.get('new_status')
+        conn.execute(
+            'UPDATE orders SET order_status = ? WHERE id = ?',
+            (new_status, order_id)
+        )
+        conn.commit()
+        flash(f'تم تحديث حالة الطلب رقم {order_id} إلى {new_status}', 'success')
+
+    orders = conn.execute('SELECT * FROM orders ORDER BY created_at DESC').fetchall()
+    conn.close()
+    return render_template('dashboard.html', orders=orders)
 
 if __name__ == '__main__':
     app.run(debug=True)

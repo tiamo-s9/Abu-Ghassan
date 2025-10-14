@@ -238,21 +238,21 @@ def employee_dashboard():
         conn.commit()
         flash(f'تم تحديث حالة الطلب رقم {order_id} إلى {new_status}', 'success')
 
-    # ----------------- منطق عرض الطلبات حسب الدور -----------------
+    # ----------------- منطق عرض الطلبات حسب الدور (تم التأكد من صحة استعلام المدير) -----------------
     if current_user.role == 'admin':
         # المدير يرى جميع طلبات جميع الوكلاء
         orders = conn.execute('SELECT * FROM orders ORDER BY created_at DESC').fetchall()
-        # لإظهار رابط المدير فقط، نجعله يعرض الرابط الخاص به
-        agent_link = url_for('upload_order_by_agent', token=current_user.request_token, _external=True)
     else:
         # الموظف يرى فقط الطلبات المنسوبة لاسم المستخدم الخاص به
         orders = conn.execute(
             'SELECT * FROM orders WHERE agent_username = ? ORDER BY created_at DESC', 
             (current_user.username,)
         ).fetchall()
-        agent_link = url_for('upload_order_by_agent', token=current_user.request_token, _external=True)
-
+        
     conn.close()
+
+    # توليد رابط الطلب الفريد للوكيل/المدير
+    agent_link = url_for('upload_order_by_agent', token=current_user.request_token, _external=True)
 
     return render_template('dashboard.html', orders=orders, agent_link=agent_link)
 

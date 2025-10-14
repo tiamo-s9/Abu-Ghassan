@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import uuid 
 from flask import Flask, render_template, request, redirect, url_for, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -7,10 +8,9 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 # ----------------- إعداد Flask وقاعدة البيانات -----------------
 
 app = Flask(__name__)
-# مفتاح سري ضروري للجلسات (تم حل مشكلة RuntimeError)
+# إعدادات الحماية وحجم الطلب
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_strong_secret_key_here')
-# لزيادة الحد الأقصى لحجم الطلب (حل مشكلة Bad Request)
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 ميجابايت 
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024 
 
 DATABASE_PATH = 'database.db'
 
@@ -19,10 +19,10 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-# دالة تهيئة قاعدة البيانات (تم حل مشكلة الترميز)
 def init_db():
     conn = get_db_connection()
     try:
+        # قراءة مخطط القاعدة مع الترميز الصحيح
         with open('schema.sql', mode='r', encoding='utf-8') as f:
             conn.executescript(f.read())
         conn.commit()
@@ -32,7 +32,7 @@ def init_db():
     finally:
         conn.close()
 
-# تهيئة قاعدة البيانات عند بدء التطبيق إذا لم تكن موجودة
+# تهيئة القاعدة عند بدء التشغيل إذا لم تكن موجودة
 if not os.path.exists(DATABASE_PATH):
     init_db()
 
@@ -43,21 +43,29 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 class User(UserMixin):
-    def __init__(self, id, username, role):
+    def __init__(self, id, username, role, request_token):
         self.id = id
         self.username = username
         self.role = role
+        self.request_token = request_token
 
 @login_manager.user_loader
 def load_user(user_id):
     conn = get_db_connection()
-    user_data = conn.execute('SELECT id, username, role FROM users WHERE id = ?', (user_id,)).fetchone()
+    user_data = conn.execute('SELECT id, username, role, request_token FROM users WHERE id = ?', (user_id,)).fetchone()
     conn.close()
     if user_data:
-        return User(user_data['id'], user_data['username'], user_data['role'])
+        return User(user_data['id'], user_data['username'], user_data['role'], user_data['request_token'])
     return None
 
-# ----------------- مسارات المستخدمين (تسجيل الدخول/الخروج/الإدارة) -----------------
+# ----------------- مسار الصفحة الرئيسية -----------------
+
+@app.route('/')
+def index():
+    """الصفحة الرئيسية التي توجه الزوار."""
+    return render_template('index.html')
+
+# ----------------- مسارات المستخدمين -----------------
 
 @app.route('/login', methods=('GET', 'POST'))
 def login():
@@ -65,7 +73,7 @@ def login():
         return redirect(url_for('employee_dashboard'))
 
     if request.method == 'POST':
-        username = request.form.get('username') # استخدام .get() لتجنب BadRequestKeyError
+        username = request.form.get('username')
         password = request.form.get('password')
 
         conn = get_db_connection()
@@ -73,7 +81,7 @@ def login():
         conn.close()
 
         if user_data and check_password_hash(user_data['password_hash'], password):
-            user = User(user_data['id'], user_data['username'], user_data['role'])
+            user = User(user_data['id'], user_data['username'], user_data['role'], user_data['request_token'])
             login_user(user)
             flash('تم تسجيل الدخول بنجاح!', 'success')
             return redirect(url_for('employee_dashboard'))
@@ -89,9 +97,9 @@ def logout():
     flash('تم تسجيل الخروج بنجاح.', 'info')
     return redirect(url_for('login'))
 
-# مسار التسجيل الأولي (محمي: مخصص لإنشاء أول حساب مدير فقط)
 @app.route('/register', methods=('GET', 'POST'))
 def register():
+    """مسار التسجيل المخصص لإنشاء أول حساب مدير فقط."""
     conn = get_db_connection()
     user_count = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
     conn.close()
@@ -108,12 +116,12 @@ def register():
             flash('يجب إدخال اسم المستخدم وكلمة المرور', 'danger')
         else:
             password_hash = generate_password_hash(password)
+            request_token = str(uuid.uuid4()) # توليد رمز فريد للمدير
             conn = get_db_connection()
             try:
-                # إنشاء أول مستخدم بدور "admin" بشكل افتراضي
                 conn.execute(
-                    "INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'admin')",
-                    (username, password_hash)
+                    "INSERT INTO users (username, password_hash, role, request_token) VALUES (?, ?, 'admin', ?)",
+                    (username, password_hash, request_token)
                 )
                 conn.commit()
                 flash('تم إنشاء حساب المدير بنجاح. يمكنك الآن تسجيل الدخول.', 'success')
@@ -125,12 +133,9 @@ def register():
 
     return render_template('register.html')
 
-# ----------------- مسار لوحة المدير لإدارة المستخدمين -----------------
-
 @app.route('/admin/users', methods=('GET', 'POST'))
 @login_required
 def admin_users():
-    # حماية: لا يمكن الوصول إلا للمديرين
     if current_user.role != 'admin':
         flash('ليس لديك صلاحية المدير للوصول إلى هذه الصفحة.', 'danger')
         return redirect(url_for('employee_dashboard'))
@@ -143,15 +148,18 @@ def admin_users():
         if action == 'add':
             username = request.form.get('username')
             password = request.form.get('password')
-            role = request.form.get('role')
+            role = request.form.get('role', 'employee')
+            
             if username and password:
                 password_hash = generate_password_hash(password)
+                request_token = str(uuid.uuid4()) # توليد رمز فريد للوكيل الجديد
                 try:
-                    conn.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", (username, password_hash, role))
+                    conn.execute("INSERT INTO users (username, password_hash, role, request_token) VALUES (?, ?, ?, ?)", 
+                                 (username, password_hash, role, request_token))
                     conn.commit()
                     flash(f'تمت إضافة المستخدم {username} بنجاح كـ {role}.', 'success')
                 except sqlite3.IntegrityError:
-                    flash('اسم المستخدم موجود بالفعل.', 'danger')
+                    flash('اسم المستخدم أو الرمز الفريد موجود بالفعل.', 'danger')
         
         elif action == 'delete':
             user_id = request.form.get('user_id')
@@ -162,17 +170,26 @@ def admin_users():
             else:
                 flash('لا يمكنك حذف حسابك الحالي.', 'danger')
 
-    users = conn.execute('SELECT id, username, role FROM users').fetchall()
+    users = conn.execute('SELECT id, username, role, request_token FROM users').fetchall()
     conn.close()
     return render_template('admin_users.html', users=users)
 
-# ----------------- مسارات الطلبات (العملاء والموظفين) -----------------
+# ----------------- مسارات الطلبات (العملاء والوكلاء) -----------------
 
-@app.route('/', methods=('GET', 'POST'))
-@app.route('/upload', methods=('GET', 'POST'))
-def upload_order():
+@app.route('/request/<token>', methods=('GET', 'POST'))
+def upload_order_by_agent(token):
+    """مسار طلب العميل الفريد المرتبط بالوكيل (المكتب)."""
+    conn = get_db_connection()
+    agent = conn.execute('SELECT username FROM users WHERE request_token = ?', (token,)).fetchone()
+    conn.close()
+
+    if not agent:
+        flash('عفواً، رابط الطلب غير صالح.', 'danger')
+        return redirect(url_for('index'))
+    
+    agent_username = agent['username']
+
     if request.method == 'POST':
-        # استخدام .get() لتجنب BadRequestKeyError
         product_type = request.form.get('product_type')
         customer_name = request.form.get('customer_name')
         phone_number = request.form.get('phone_number')
@@ -181,19 +198,20 @@ def upload_order():
 
         if not all([product_type, customer_name, phone_number, location]):
             flash('الرجاء تعبئة جميع الحقول المطلوبة.', 'danger')
-            return render_template('upload.html')
+            return render_template('upload.html', agent_token=token)
 
         conn = get_db_connection()
         conn.execute(
-            'INSERT INTO orders (product_type, customer_name, phone_number, location, details) VALUES (?, ?, ?, ?, ?)',
-            (product_type, customer_name, phone_number, location, details)
+            'INSERT INTO orders (product_type, customer_name, phone_number, location, details, agent_username) VALUES (?, ?, ?, ?, ?, ?)',
+            (product_type, customer_name, phone_number, location, details, agent_username)
         )
         conn.commit()
         conn.close()
-        flash('تم استلام طلبك بنجاح!', 'success')
+        flash(f'تم استلام طلبك بنجاح وسيتم معالجته بواسطة الوكيل {agent_username}!', 'success')
         return redirect(url_for('success'))
 
-    return render_template('upload.html')
+    return render_template('upload.html', agent_token=token)
+
 
 @app.route('/success')
 def success():
@@ -202,16 +220,17 @@ def success():
 @app.route('/dashboard', methods=('GET', 'POST'))
 @login_required
 def employee_dashboard():
-    # حماية لوحة القيادة بنظام الأدوار
     if current_user.role not in ['admin', 'employee']:
         flash('ليس لديك الصلاحية الكافية للوصول إلى هذه الصفحة.', 'danger')
         return redirect(url_for('login'))
         
     conn = get_db_connection()
-
+    
     if request.method == 'POST':
         order_id = request.form.get('order_id')
         new_status = request.form.get('new_status')
+        
+        # المدير والموظف يمكنهم تحديث الحالة فقط
         conn.execute(
             'UPDATE orders SET order_status = ? WHERE id = ?',
             (new_status, order_id)
@@ -219,9 +238,23 @@ def employee_dashboard():
         conn.commit()
         flash(f'تم تحديث حالة الطلب رقم {order_id} إلى {new_status}', 'success')
 
-    orders = conn.execute('SELECT * FROM orders ORDER BY created_at DESC').fetchall()
+    # ----------------- منطق عرض الطلبات حسب الدور -----------------
+    if current_user.role == 'admin':
+        # المدير يرى جميع طلبات جميع الوكلاء
+        orders = conn.execute('SELECT * FROM orders ORDER BY created_at DESC').fetchall()
+        # لإظهار رابط المدير فقط، نجعله يعرض الرابط الخاص به
+        agent_link = url_for('upload_order_by_agent', token=current_user.request_token, _external=True)
+    else:
+        # الموظف يرى فقط الطلبات المنسوبة لاسم المستخدم الخاص به
+        orders = conn.execute(
+            'SELECT * FROM orders WHERE agent_username = ? ORDER BY created_at DESC', 
+            (current_user.username,)
+        ).fetchall()
+        agent_link = url_for('upload_order_by_agent', token=current_user.request_token, _external=True)
+
     conn.close()
-    return render_template('dashboard.html', orders=orders)
+
+    return render_template('dashboard.html', orders=orders, agent_link=agent_link)
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -3,33 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>لوحة تحكم الموظفين</title>
+    <title>لوحة تحكم الوكلاء</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.rtl.min.css">
     <style>
         body { padding-top: 20px; background-color: #f8f9fa; }
         .order-card { margin-bottom: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
         .status-badge { font-size: 0.9em; padding: 0.4em 0.8em; }
-        .status-Pending { background-color: #ffc107; color: #343a40; } /* أصفر */
-        .status-Processing { background-color: #0d6efd; color: white; } /* أزرق */
-        .status-Completed { background-color: #28a745; color: white; } /* أخضر */
-        .status-Cancelled { background-color: #dc3545; color: white; } /* أحمر */
+        .status-Pending { background-color: #ffc107; color: #343a40; } 
+        .status-Processing { background-color: #0d6efd; color: white; } 
+        .status-Completed { background-color: #28a745; color: white; } 
+        .status-Cancelled { background-color: #dc3545; color: white; } 
     </style>
 </head>
 <body>
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h3">مرحباً، {{ current_user.username }} 👋</h1>
+        <h1 class="h3">مرحباً، {{ current_user.username }} 👋 ({{ current_user.role }})</h1>
         <div class="actions">
-            {% if current_user.is_authenticated %}
-                {% if current_user.role == 'admin' %}
-                    <a href="{{ url_for('admin_users') }}" class="btn btn-warning ms-2">إدارة المستخدمين</a>
-                {% endif %}
-                <a href="{{ url_for('logout') }}" class="btn btn-danger">تسجيل الخروج</a>
+            {% if current_user.role == 'admin' %}
+                <a href="{{ url_for('admin_users') }}" class="btn btn-warning ms-2">إدارة المستخدمين</a>
             {% endif %}
+            <a href="{{ url_for('logout') }}" class="btn btn-danger">تسجيل الخروج</a>
         </div>
     </div>
     
-    <h2 class="mb-4">قائمة طلبات العملاء الجديدة</h2>
+    <div class="alert alert-info text-center mb-4">
+        <h5 class="alert-heading">رابط الطلب الفريد الخاص بك:</h5>
+        <code id="agentLink">{{ agent_link }}</code>
+        <button class="btn btn-sm btn-outline-info ms-3" onclick="copyLink()">نسخ الرابط</button>
+    </div>
+
+    <h2 class="mb-4">{{ 'جميع طلبات الوكلاء' if current_user.role == 'admin' else 'طلباتي الخاصة' }}</h2>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -41,7 +45,7 @@
 
     {% if not orders %}
         <div class="alert alert-info text-center" role="alert">
-            لا توجد طلبات جديدة حاليًا في النظام.
+            لا توجد طلبات في القائمة حاليًا.
         </div>
     {% else %}
         <div class="row">
@@ -50,7 +54,12 @@
                 <div class="card order-card">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">طلب رقم: #{{ order['id'] }}</h5>
-                        <span class="badge status-badge status-{{ order['order_status'] }}">{{ order['order_status'] }}</span>
+                        <div class="d-flex align-items-center">
+                            {% if current_user.role == 'admin' %}
+                                <span class="badge bg-secondary ms-2">الوكيل: {{ order['agent_username'] }}</span>
+                            {% endif %}
+                            <span class="badge status-badge status-{{ order['order_status'] }}">{{ order['order_status'] }}</span>
+                        </div>
                     </div>
                     <div class="card-body">
                         <p><strong>نوع المنتج:</strong> {{ order['product_type'] }}</p>
@@ -66,11 +75,10 @@
                             <input type="hidden" name="order_id" value="{{ order['id'] }}">
                             <div class="input-group">
                                 <select class="form-select" name="new_status" required>
-                                    <option value="">تغيير الحالة إلى...</option>
-                                    <option value="Pending" {% if order['order_status'] == 'Pending' %}selected{% endif %}>معلق (Pending)</option>
-                                    <option value="Processing" {% if order['order_status'] == 'Processing' %}selected{% endif %}>قيد المعالجة (Processing)</option>
-                                    <option value="Completed" {% if order['order_status'] == 'Completed' %}selected{% endif %}>مكتمل (Completed)</option>
-                                    <option value="Cancelled" {% if order['order_status'] == 'Cancelled' %}selected{% endif %}>ملغى (Cancelled)</option>
+                                    <option value="Pending" {% if order['order_status'] == 'Pending' %}selected{% endif %}>معلق</option>
+                                    <option value="Processing" {% if order['order_status'] == 'Processing' %}selected{% endif %}>قيد المعالجة</option>
+                                    <option value="Completed" {% if order['order_status'] == 'Completed' %}selected{% endif %}>مكتمل</option>
+                                    <option value="Cancelled" {% if order['order_status'] == 'Cancelled' %}selected{% endif %}>ملغى</option>
                                 </select>
                                 <button type="submit" class="btn btn-primary">تحديث</button>
                             </div>
@@ -83,5 +91,16 @@
     {% endif %}
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script>
+    function copyLink() {
+        var copyText = document.getElementById("agentLink");
+        var range = document.createRange();
+        range.selectNode(copyText);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
+        document.execCommand("copy");
+        alert("تم نسخ الرابط: " + copyText.innerText);
+    }
+</script>
 </body>
 </html>

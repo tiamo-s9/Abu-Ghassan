@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>الصفحة الرئيسية</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.rtl.min.css">
+    <style>
+        .container { max-width: 600px; margin-top: 100px; }
+    </style>
+</head>
+<body>
+    <div class="container text-center">
+        <h1 class="mb-4">نظام إدارة طلبات الوكلاء</h1>
+        <p class="lead">يرجى تسجيل الدخول للوصول إلى لوحة التحكم الخاصة بالوكيل أو المدير.</p>
+        
+        <div class="d-grid gap-2 col-6 mx-auto mt-4">
+            <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg">تسجيل الدخول</a>
+            {% with messages = get_flashed_messages() %}
+            {% if not messages and user_count is not defined %} 
+                <a href="{{ url_for('register') }}" class="btn btn-secondary mt-2">إنشاء حساب المدير الأولي</a>
+            {% endif %}
+            {% endwith %}
+        </div>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="mt-4">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'success' if category == 'success' or category == 'info' else 'danger' }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+    </div>
+</body>
+</html>

@@ -66,6 +66,13 @@
                         <p><strong>اسم العميل:</strong> {{ order['customer_name'] }}</p>
                         <p><strong>رقم الهاتف:</strong> {{ order['phone_number'] }}</p>
                         <p><strong>الموقع:</strong> {{ order['location'] }}</p>
+                        <p><strong>الملف المرفق:</strong> 
+                            {% if order['file_name'] and order['file_name'] != 'No File' %}
+                                <a href="{{ url_for('uploaded_file', filename=order['file_name']) }}" target="_blank">{{ order['file_name'] }}</a>
+                            {% else %}
+                                لا يوجد ملف
+                            {% endif %}
+                        </p>
                         <p><strong>التفاصيل:</strong> {{ order['details'] if order['details'] else 'لا توجد تفاصيل إضافية' }}</p>
                         <p class="text-muted small">تاريخ الإضافة: {{ order['created_at'] }}</p>
                         

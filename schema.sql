@@ -18,5 +18,6 @@ CREATE TABLE orders (
     details TEXT,
     order_status TEXT NOT NULL DEFAULT 'Pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    agent_username TEXT NOT NULL -- اسم الوكيل الذي أنشأ الطلب
+    agent_username TEXT NOT NULL,
+    file_name TEXT DEFAULT 'No File' -- **عمود جديد لاسم الملف المرفوع**
 );

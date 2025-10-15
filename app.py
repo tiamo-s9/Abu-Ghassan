@@ -1,18 +1,25 @@
 import sqlite3
 import os
 import uuid 
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from werkzeug.utils import secure_filename # استيراد دالة حماية اسم الملف
 
 # ----------------- إعداد Flask وقاعدة البيانات -----------------
 
-app = Flask(__name__)
-# إعدادات الحماية وحجم الطلب
+app = Flask(__name__) 
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_strong_secret_key_here')
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024 
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024 # الحد الأقصى 16 ميجابايت 
 
 DATABASE_PATH = 'database.db'
+
+# إعداد مجلد رفع الملفات
+UPLOAD_FOLDER = 'uploads'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
 def get_db_connection():
     conn = sqlite3.connect(DATABASE_PATH)
@@ -22,7 +29,6 @@ def get_db_connection():
 def init_db():
     conn = get_db_connection()
     try:
-        # قراءة مخطط القاعدة مع الترميز الصحيح
         with open('schema.sql', mode='r', encoding='utf-8') as f:
             conn.executescript(f.read())
         conn.commit()
@@ -32,7 +38,6 @@ def init_db():
     finally:
         conn.close()
 
-# تهيئة القاعدة عند بدء التشغيل إذا لم تكن موجودة
 if not os.path.exists(DATABASE_PATH):
     init_db()
 
@@ -62,8 +67,13 @@ def load_user(user_id):
 
 @app.route('/')
 def index():
-    """الصفحة الرئيسية التي توجه الزوار."""
     return render_template('index.html')
+
+# ----------------- مسار مخصص لعرض الملفات المرفوعة -----------------
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    """مسار مخصص لعرض الملفات المرفوعة."""
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 # ----------------- مسارات المستخدمين -----------------
 
@@ -99,7 +109,6 @@ def logout():
 
 @app.route('/register', methods=('GET', 'POST'))
 def register():
-    """مسار التسجيل المخصص لإنشاء أول حساب مدير فقط."""
     conn = get_db_connection()
     user_count = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
     conn.close()
@@ -116,7 +125,7 @@ def register():
             flash('يجب إدخال اسم المستخدم وكلمة المرور', 'danger')
         else:
             password_hash = generate_password_hash(password)
-            request_token = str(uuid.uuid4()) # توليد رمز فريد للمدير
+            request_token = str(uuid.uuid4())
             conn = get_db_connection()
             try:
                 conn.execute(
@@ -152,7 +161,7 @@ def admin_users():
             
             if username and password:
                 password_hash = generate_password_hash(password)
-                request_token = str(uuid.uuid4()) # توليد رمز فريد للوكيل الجديد
+                request_token = str(uuid.uuid4())
                 try:
                     conn.execute("INSERT INTO users (username, password_hash, role, request_token) VALUES (?, ?, ?, ?)", 
                                  (username, password_hash, role, request_token))
@@ -178,7 +187,7 @@ def admin_users():
 
 @app.route('/request/<token>', methods=('GET', 'POST'))
 def upload_order_by_agent(token):
-    """مسار طلب العميل الفريد المرتبط بالوكيل (المكتب)."""
+    """مسار طلب العميل الفريد المرتبط بالوكيل (المكتب) ومعالجة رفع الملفات."""
     conn = get_db_connection()
     agent = conn.execute('SELECT username FROM users WHERE request_token = ?', (token,)).fetchone()
     conn.close()
@@ -190,11 +199,23 @@ def upload_order_by_agent(token):
     agent_username = agent['username']
 
     if request.method == 'POST':
+        # الحصول على حقول النموذج
         product_type = request.form.get('product_type')
         customer_name = request.form.get('customer_name')
         phone_number = request.form.get('phone_number')
         location = request.form.get('location')
         details = request.form.get('details')
+        
+        # ----------------- معالجة رفع الملف -----------------
+        file = request.files.get('order_file')
+        db_filename = "No File" 
+
+        if file and file.filename:
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+            db_filename = filename
+        # -----------------------------------------------------
 
         if not all([product_type, customer_name, phone_number, location]):
             flash('الرجاء تعبئة جميع الحقول المطلوبة.', 'danger')
@@ -202,8 +223,8 @@ def upload_order_by_agent(token):
 
         conn = get_db_connection()
         conn.execute(
-            'INSERT INTO orders (product_type, customer_name, phone_number, location, details, agent_username) VALUES (?, ?, ?, ?, ?, ?)',
-            (product_type, customer_name, phone_number, location, details, agent_username)
+            'INSERT INTO orders (product_type, customer_name, phone_number, location, details, agent_username, file_name) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            (product_type, customer_name, phone_number, location, details, agent_username, db_filename)
         )
         conn.commit()
         conn.close()
@@ -230,7 +251,6 @@ def employee_dashboard():
         order_id = request.form.get('order_id')
         new_status = request.form.get('new_status')
         
-        # المدير والموظف يمكنهم تحديث الحالة فقط
         conn.execute(
             'UPDATE orders SET order_status = ? WHERE id = ?',
             (new_status, order_id)
@@ -238,12 +258,10 @@ def employee_dashboard():
         conn.commit()
         flash(f'تم تحديث حالة الطلب رقم {order_id} إلى {new_status}', 'success')
 
-    # ----------------- منطق عرض الطلبات حسب الدور (تم التأكد من صحة استعلام المدير) -----------------
+    # ----------------- منطق عرض الطلبات حسب الدور (المدير يرى الكل) -----------------
     if current_user.role == 'admin':
-        # المدير يرى جميع طلبات جميع الوكلاء
         orders = conn.execute('SELECT * FROM orders ORDER BY created_at DESC').fetchall()
     else:
-        # الموظف يرى فقط الطلبات المنسوبة لاسم المستخدم الخاص به
         orders = conn.execute(
             'SELECT * FROM orders WHERE agent_username = ? ORDER BY created_at DESC', 
             (current_user.username,)
@@ -251,7 +269,6 @@ def employee_dashboard():
         
     conn.close()
 
-    # توليد رابط الطلب الفريد للوكيل/المدير
     agent_link = url_for('upload_order_by_agent', token=current_user.request_token, _external=True)
 
     return render_template('dashboard.html', orders=orders, agent_link=agent_link)

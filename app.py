@@ -4,13 +4,13 @@ import uuid
 from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from werkzeug.utils import secure_filename # استيراد دالة حماية اسم الملف
+from werkzeug.utils import secure_filename
 
 # ----------------- إعداد Flask وقاعدة البيانات -----------------
 
 app = Flask(__name__) 
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_strong_secret_key_here')
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024 # الحد الأقصى 16 ميجابايت 
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024 
 
 DATABASE_PATH = 'database.db'
 
@@ -29,6 +29,7 @@ def get_db_connection():
 def init_db():
     conn = get_db_connection()
     try:
+        # تأكد من وجود ملف schema.sql في جذر المشروع
         with open('schema.sql', mode='r', encoding='utf-8') as f:
             conn.executescript(f.read())
         conn.commit()
@@ -69,7 +70,7 @@ def load_user(user_id):
 def index():
     return render_template('index.html')
 
-# ----------------- مسار مخصص لعرض الملفات المرفوعة -----------------
+# ----------------- مسار مخصص لعرض الملفات المرفوعة (حل مشكلة Not Found) -----------------
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     """مسار مخصص لعرض الملفات المرفوعة."""
@@ -183,7 +184,7 @@ def admin_users():
     conn.close()
     return render_template('admin_users.html', users=users)
 
-# ----------------- مسارات الطلبات (العملاء والوكلاء) -----------------
+# ----------------- مسار رفع الطلب (للوكيل/العميل) (حل مشكلة تسجيل الدخول) -----------------
 
 @app.route('/request/<token>', methods=('GET', 'POST'))
 def upload_order_by_agent(token):
@@ -258,7 +259,7 @@ def employee_dashboard():
         conn.commit()
         flash(f'تم تحديث حالة الطلب رقم {order_id} إلى {new_status}', 'success')
 
-    # ----------------- منطق عرض الطلبات حسب الدور (المدير يرى الكل) -----------------
+    # منطق عرض الطلبات حسب الدور (المدير يرى الكل)
     if current_user.role == 'admin':
         orders = conn.execute('SELECT * FROM orders ORDER BY created_at DESC').fetchall()
     else:

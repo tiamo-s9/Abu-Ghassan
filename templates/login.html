@@ -2,26 +2,28 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>تسجيل الدخول - نظام الوكلاء</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تسجيل الدخول</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.rtl.min.css">
     <style>
-        .container { max-width: 400px; margin-top: 100px; }
-        .flash { margin-bottom: 20px; }
+        body { background-color: #f8f9fa; }
+        .login-container { max-width: 400px; margin: 100px auto; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); background-color: white; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1 class="mb-4 text-center">تسجيل دخول الوكلاء/المديرين</h1>
-        
+<div class="container">
+    <div class="login-container">
+        <h1 class="text-center mb-4">تسجيل الدخول</h1>
+
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="alert alert-{{ 'success' if category == 'success' or category == 'info' else 'danger' }} flash">{{ message }}</div>
+                    <div class="alert alert-{{ 'success' if category == 'success' or category == 'info' else 'danger' }}">{{ message }}</div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
 
-        <form method="POST">
+        <form method="POST" action="{{ url_for('login') }}">
             <div class="mb-3">
                 <label for="username" class="form-label">اسم المستخدم:</label>
                 <input type="text" class="form-control" id="username" name="username" required>
@@ -30,12 +32,17 @@
                 <label for="password" class="form-label">كلمة المرور:</label>
                 <input type="password" class="form-control" id="password" name="password" required>
             </div>
-            <button type="submit" class="btn btn-primary w-100">تسجيل الدخول</button>
-        </form>
+            
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="remember" name="remember" value="True">
+                <label class="form-check-label" for="remember">تذكرني (للبقاء مسجلاً)</label>
+            </div>
 
-        <p class="mt-3 text-center">
-            <a href="{{ url_for('index') }}">العودة للصفحة الرئيسية</a>
-        </p>
+            <button type="submit" class="btn btn-primary w-100">دخول</button>
+            <p class="text-center mt-3">ليس لديك حساب؟ <a href="{{ url_for('register') }}">إنشاء حساب جديد</a></p>
+        </form>
     </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
